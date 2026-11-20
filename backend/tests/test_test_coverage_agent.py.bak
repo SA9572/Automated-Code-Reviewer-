@@ -1,0 +1,187 @@
+import json
+from unittest.mock import AsyncMock
+
+import pytest
+
+from app.agents.test_coverage_agent import TestCoverageAgent
+from app.schemas.agent_result import AgentStatus
+
+
+@pytest.fixture
+def coverage_agent():
+
+    agent = TestCoverageAgent()
+
+    agent.generate_response = AsyncMock(
+        return_value=json.dumps(
+            {
+                "summary": "Testing gaps detected.",
+                "findings": [
+                    {
+                        "title": "Missing edge case tests",
+                        "description": (
+                            "The new calculation does not have "
+                            "tests for empty or negative input."
+                        ),
+                        "severity": "MEDIUM",
+                        "confidence": 0.95,
+                        "file_path": "app/calculator.py",
+                        "start_line": None,
+                        "end_line": None,
+                        "evidence": (
+                            "New calculate_total() function "
+                            "has no corresponding test changes supplied."
+                        ),
+                        "recommendation": (
+                            "Add tests for empty input, negative values, "
+                            "and boundary values."
+                        ),
+                        "rule_id": "TST-002",
+                    }
+                ],
+            }
+        )
+    )
+
+    return agent
+
+
+@pytest.mark.asyncio
+async def test_empty_diff_does_not_call_llm(coverage_agent):
+
+    result = await coverage_agent.execute({"diff_content": ""})
+
+    assert result.status == AgentStatus.SUCCESS
+    assert result.finding_count == 0
+
+    coverage_agent.generate_response.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_successful_coverage_analysis(coverage_agent):
+
+    result = await coverage_agent.execute(
+        {
+            "diff_content": "+def calculate_total(values): return sum(values)",
+            "test_diff": """
+            +def test_calculate_total():
+            +    assert calculate_total([1, 2, 3]) == 6
+            """,
+            "changed_files": ["app/calculator.py"],
+            "repository": "test-repository",
+        }
+    )
+
+    assert result.status == AgentStatus.SUCCESS
+    assert result.agent_name == "TestCoverageAgent"
+    assert result.finding_count == 1
+
+    finding = result.findings[0]
+
+    assert finding.agent_name == "TestCoverageAgent"
+    assert finding.rule_id == "TST-002"
+    assert finding.severity.value == "MEDIUM"
+
+
+@pytest.mark.asyncio
+async def test_invalid_diff_type(coverage_agent):
+
+    result = await coverage_agent.execute({"diff_content": 123})
+
+    assert result.status == AgentStatus.FAILED
+    assert "diff_content must be a string" in result.error
+
+
+@pytest.mark.asyncio
+async def test_invalid_test_diff_type(coverage_agent):
+
+    result = await coverage_agent.execute(
+        {
+            "diff_content": "+x = 1",
+            "test_diff": 123,
+        }
+    )
+
+    assert result.status == AgentStatus.FAILED
+    assert "test_diff must be a string" in result.error
+
+
+@pytest.mark.asyncio
+async def test_unknown_rule_fails(coverage_agent):
+
+    coverage_agent.generate_response = AsyncMock(
+        return_value=json.dumps(
+            {
+                "summary": "Testing gap",
+                "findings": [
+                    {
+                        "title": "Unknown testing issue",
+                        "description": "Test",
+                        "severity": "LOW",
+                        "confidence": 0.9,
+                        "file_path": "app/test.py",
+                        "evidence": "Test evidence",
+                        "recommendation": "Add tests",
+                        "rule_id": "UNKNOWN001",
+                    }
+                ],
+            }
+        )
+    )
+
+    result = await coverage_agent.execute(
+        {
+            "diff_content": "+x = 1",
+            "test_diff": """
+    +def test_example():
+    +    assert True
+    """,
+        }
+    )
+
+    assert result.status == AgentStatus.FAILED
+    assert "Unknown test coverage rule_id" in result.error
+
+
+def test_parse_valid_json():
+
+    response = json.dumps({"summary": "No testing gaps found.", "findings": []})
+
+    parsed = TestCoverageAgent._parse_response(response)
+
+    assert parsed["summary"] == "No testing gaps found."
+    assert parsed["findings"] == []
+
+
+def test_parse_markdown_wrapped_json():
+
+    response = """```json
+    {
+        "summary": "Testing review completed.",
+        "findings": []
+    }
+    ```"""
+
+    parsed = TestCoverageAgent._parse_response(response)
+
+    assert parsed["summary"] == "Testing review completed."
+
+
+def test_invalid_json_raises_error():
+
+    with pytest.raises(ValueError, match="invalid JSON"):
+        TestCoverageAgent._parse_response("invalid json")
+
+
+def test_findings_must_be_list():
+
+    response = json.dumps({"summary": "Test", "findings": "invalid"})
+
+    with pytest.raises(ValueError, match="findings must be a list"):
+        TestCoverageAgent._parse_response(response)
+
+
+def test_non_string_response():
+
+    with pytest.raises(ValueError, match="must be a string"):
+        TestCoverageAgent._parse_response(123)

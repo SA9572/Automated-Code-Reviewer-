@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Automated Code Review Board - Frontend</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-container">
+        <header class="app-header">
+            <div class="header-content">
+                <h1>Automated Code Review Board</h1>
+                <div class="status-indicator" id="health-status">
+                    <span class="status-dot"></span>
+                    <span id="health-text">Checking backend...</span>
+                </div>
+            </div>
+        </header>
+
+        <nav class="app-nav">
+            <button class="nav-btn active" onclick="showSection('dashboard')" id="nav-dashboard">Dashboard</button>
+            <button class="nav-btn" onclick="showSection('create-review')" id="nav-create">Create Review</button>
+            <button class="nav-btn" onclick="showSection('github')" id="nav-github">GitHub Integration</button>
+            <button class="nav-btn" onclick="showSection('reviews')" id="nav-reviews">All Reviews</button>
+        </nav>
+
+        <main class="app-main">
+            <!-- Dashboard Section -->
+            <section id="dashboard" class="section active">
+                <div class="dashboard-grid">
+                    <div class="stat-card">
+                        <h3>Backend Status</h3>
+                        <p id="dashboard-health">Unknown</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Total Reviews</h3>
+                        <p id="dashboard-total">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Completed</h3>
+                        <p id="dashboard-completed">0</p>
+                    </div>
+                    <div class="stat-card">
+                        <h3>Pending/Running</h3>
+                        <p id="dashboard-pending">0</p>
+                    </div>
+                </div>
+                <div class="quick-actions">
+                    <h3>Quick Actions</h3>
+                    <div class="action-buttons">
+                        <button class="btn btn-primary" onclick="showSection('create-review')">Create New Review</button>
+                        <button class="btn btn-secondary" onclick="showSection('github')">GitHub Integration</button>
+                        <button class="btn btn-secondary" onclick="loadHealth()">Refresh Status</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Create Review Section -->
+            <section id="create-review" class="section">
+                <div class="form-card">
+                    <h2>Create Code Review</h2>
+                    <form id="create-review-form">
+                        <div class="form-group">
+                            <label>Repository <span class="required">*</span></label>
+                            <input type="text" id="repo-input" placeholder="owner/repo" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Base Commit <span class="required">*</span></label>
+                            <input type="text" id="base-commit-input" placeholder="Base commit SHA" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Head Commit <span class="required">*</span></label>
+                            <input type="text" id="head-commit-input" placeholder="Head commit SHA" required>
+                        </div>
+                        <div class="form-group">
+                            <label>Diff Content <span class="required">*</span></label>
+                            <textarea id="diff-content-input" rows="10" placeholder="Paste unified Git diff here" required></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Changed Files (comma-separated)</label>
+                            <input type="text" id="changed-files-input" placeholder="src/main.py, utils/helper.py">
+                        </div>
+                        <div class="form-group">
+                            <label>Pull Request Number</label>
+                            <input type="number" id="pr-number-input" placeholder="Optional PR number">
+                        </div>
+                        <div class="form-group">
+                            <label>Test Diff</label>
+                            <textarea id="test-diff-input" rows="5" placeholder="Test file diff (optional)"></textarea>
+                        </div>
+                        <div class="form-group">
+                            <label>Test Files (comma-separated)</label>
+                            <input type="text" id="test-files-input" placeholder="tests/test_main.py">
+                        </div>
+                        <button type="submit" class="btn btn-primary btn-block">Run Review</button>
+                    </form>
+                    <div id="create-review-result" class="result-area"></div>
+                </div>
+            </section>
+
+            <!-- GitHub Integration Section -->
+            <section id="github" class="section">
+                <div class="form-card">
+                    <h2>GitHub Integration</h2>
+                    <div class="github-status">
+                        <h3>Authentication Status</h3>
+                        <p id="github-auth-status">Checking...</p>
+                        <button class="btn btn-secondary" onclick="checkGitHubAuth()">Refresh</button>
+                    </div>
+
+                    <div class="github-actions">
+                        <h3>Repository Actions</h3>
+                        <div class="form-group">
+                            <label>Owner</label>
+                            <input type="text" id="gh-owner-input" placeholder="Repository owner">
+                        </div>
+                        <div class="form-group">
+                            <label>Repository</label>
+                            <input type="text" id="gh-repo-input" placeholder="Repository name">
+                        </div>
+                        <div class="action-buttons">
+                            <button class="btn btn-secondary" onclick="listGitHubRepos()">List My Repositories</button>
+                            <button class="btn btn-secondary" onclick="listGitHubPRs()">List Pull Requests</button>
+                        </div>
+                    </div>
+
+                    <div id="github-repos-list" class="list-area"></div>
+                    <div id="github-prs-list" class="list-area"></div>
+
+                    <div class="form-card">
+                        <h3>Run Review on Pull Request</h3>
+                        <form id="gh-pr-review-form">
+                            <div class="form-group">
+                                <label>Owner <span class="required">*</span></label>
+                                <input type="text" id="gh-review-owner" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Repository <span class="required">*</span></label>
+                                <input type="text" id="gh-review-repo" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Pull Request Number <span class="required">*</span></label>
+                                <input type="number" id="gh-review-pr" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Run AI Review on PR</button>
+                        </form>
+                        <div id="gh-pr-review-result" class="result-area"></div>
+                    </div>
+
+                    <div class="form-card">
+                        <h3>Run Baseline Review (Repository Snapshot)</h3>
+                        <form id="gh-baseline-form">
+                            <div class="form-group">
+                                <label>Owner <span class="required">*</span></label>
+                                <input type="text" id="gh-baseline-owner" required>
+                            </div>
+                            <div class="form-group">
+                                <label>Repository <span class="required">*</span></label>
+                                <input type="text" id="gh-baseline-repo" required>
+                            </div>
+                            <button type="submit" class="btn btn-primary">Run Baseline Review</button>
+                        </form>
+                        <div id="gh-baseline-result" class="result-area"></div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- All Reviews Section -->
+            <section id="reviews" class="section">
+                <div class="form-card">
+                    <h2>All Reviews</h2>
+                    <div class="reviews-toolbar">
+                        <input type="text" id="review-search" placeholder="Filter by repository...">
+                        <select id="review-status-filter">
+                            <option value="">All Statuses</option>
+                            <option value="PENDING">Pending</option>
+                            <option value="RUNNING">Running</option>
+                            <option value="COMPLETED">Completed</option>
+                            <option value="PARTIAL">Partial</option>
+                            <option value="FAILED">Failed</option>
+                        </select>
+                        <button class="btn btn-secondary" onclick="loadReviews()">Refresh</button>
+                    </div>
+                    <div id="reviews-list" class="reviews-table">
+                        <table>
+                            <thead>
+                                <tr>
+                                    <th>Review ID</th>
+                                    <th>Repository</th>
+                                    <th>Status</th>
+                                    <th>Findings</th>
+                                    <th>Recommendation</th>
+                                    <th>Created</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="reviews-table-body">
+                            </tbody>
+                        </table>
+                    </div>
+                    <div id="reviews-pagination" class="pagination"></div>
+                </div>
+            </section>
+
+            <!-- Review Detail Section (shown dynamically) -->
+            <section id="review-detail" class="section hidden">
+                <div class="form-card">
+                    <h2>Review Details</h2>
+                    <div id="review-detail-content"></div>
+                    <button class="btn btn-secondary" onclick="showSection('reviews')">Back to Reviews</button>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>

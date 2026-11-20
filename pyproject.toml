@@ -1,0 +1,29 @@
+
+[tool.ruff]
+target-version = "py314"
+line-length = 88
+src = ["backend"]
+
+[tool.ruff.lint]
+select = [
+    "E",
+    "F",
+    "I",
+    "B",
+    "UP",
+    "SIM",
+    "RUF",
+    "TRY",
+]
+
+# Preserve intentional exception semantics and FastAPI dependency patterns.
+ignore = [
+    "TRY003",  # Keep descriptive exception messages.
+    "TRY004",  # Preserve current exception types.
+    "TRY300",  # Keep current try/except return structure.
+    "TRY301",  # Avoid unnecessary helper functions for raises.
+    "UP042",   # Preserve str + Enum compatibility.
+]
+
+[tool.ruff.lint.per-file-ignores]
+"backend/app/api/routes/reviews.py" = ["B008"]
